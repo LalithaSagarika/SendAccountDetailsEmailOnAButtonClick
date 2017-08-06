@@ -1,0 +1,67 @@
+// written by Lalitha Sagarika Adduru (lalitha.iitm@gmail.com) , prominently to facilitate us to send email of an account record details including notes and attachments
+global class SendAccountEmail 
+{
+    //accepts Id of account, a message to be in email, and email recepients
+    webservice static void sendAccountDetailsEmail(Id accountId, String message, String[] emailAddresses)
+    {
+        List<Account> relevantAccount = [
+            SELECT id, Name, BillingAddress, ShippingAddress, AccountNumber, Type
+            FROM Account WHERE Id =: accountId
+        ];
+        
+        //set parameters to the email to be sent
+        Messaging.SingleEmailMessage mailToBeSent = new Messaging.SingleEmailMessage();
+        mailToBeSent.setToAddresses(emailAddresses);
+        mailToBeSent.setSubject('Account '+relevantAccount[0].Name+' details');
+        String emailBody = 'Hi, '+
+            		'<br/>'+message+'<br/>'+
+            		'<br/>Name : '+relevantAccount[0].Name+'<br/>'+
+            		'<br/>AccountNumber : '+relevantAccount[0].AccountNumber+'<br/>'+
+            		'<br/>BillingAddress : '+relevantAccount[0].BillingAddress+'<br/>'+
+            		'<br/>ShippingAddress : '+relevantAccount[0].ShippingAddress+'<br/>'+
+            		'<br/>AccountLink : '+URL.getSalesforceBaseUrl().toExternalForm()+'/'+accountId+'<br/>';
+        
+        mailToBeSent.setHTMLBody(emailBody); 
+        
+        // list of all attachments to be sent ( these can't be queried in the above soql , as binary fields(body) can't be used in join query )
+        List<Attachment> attachments = [
+            SELECT Id, Name, Body, ContentType 
+            FROM Attachment 
+            WHERE Parentid =: accountId
+        ];
+        
+        List<Note> notes = [
+            select Id, CreatedBy.Name, title, Body 
+            from Note 
+            where parentid =: accountId
+        ];
+        
+        // link our notes and attachments to the above email we are creating.
+        // 
+        List<Messaging.EmailFileAttachment> emailAttachments = new List<Messaging.EmailFileAttachment>();
+        
+        for(Attachment att : Attachments)
+        {
+            Messaging.EmailFileAttachment mailAttachment = new Messaging.EmailFileAttachment();
+            mailAttachment.setFileName(att.Name);
+            mailAttachment.setBody(att.Body);
+            mailAttachment.setContentType(att.contentType);
+            emailAttachments.add(mailAttachment);
+        }
+        
+        for(Note note : Notes)
+        {
+            Messaging.EmailFileAttachment mailNote = new Messaging.EmailFileAttachment();
+            mailNote.setFileName(note.Title+'.doc');
+            mailNote.Body = Blob.valueOf('Created By : '+note.Createdby.Name+'\n\n'+note.Body);
+            emailAttachments.add(mailNote);
+        }
+        
+        mailToBeSent.setFileAttachments(emailAttachments);
+        
+        // send email
+        Messaging.SendEmail(new Messaging.SingleEmailMessage[]{mailToBeSent});
+              
+    }
+
+}
